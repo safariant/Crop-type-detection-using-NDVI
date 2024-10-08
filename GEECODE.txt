@@ -1,0 +1,72 @@
+// Define the study area Taita_Taveta
+var Taita = Taita.geometry();
+Map.centerObject(Taita, 10);
+//Map.addLayer(Taita,{},"Taita");
+
+
+//Select specific image from the collection, filter dates and bounds
+var time_start = "2023", time_end = "2024"
+
+var landsat8 = imageCollection
+.filterDate (time_start, time_end)
+.filterBounds(Taita)
+.map(function(img){
+  var ms = img.select("SR.*")
+  var gain = ee.Number(img.get("REFLECTANCE_MULT_BAND_3"))
+  var offset = ee.Number(img.get("REFLECTANCE_MULT_BAND_2"))
+  var sr = ms.multiply(gain).add(offset)
+  var ndvi = sr.normalizedDifference(["SR_B5", "SR_B4"]).rename('ndvi')
+  return ndvi
+  .copyProperties(img, ['system:time_start','system:time_end','system:index'])
+})
+
+
+var landsat9 = imageCollection2
+.filterDate(time_start, time_end)
+.filterBounds(Taita)
+.map(function(img){
+  var ms = img.select("SR.*")
+  var gain = ee.Number(img.get("REFLECTANCE_MULT_BAND_3"))
+  var offset = ee.Number(img.get("REFLECTANCE_MULT_BAND_2"))
+  var sr = ms.multiply(gain).add(offset)
+  var ndvi = sr.normalizedDifference(["SR_B5", "SR_B4"]).rename('ndvi')
+  return ndvi
+  .copyProperties(img, ['system:time_start','system:time_end','system:index'])
+})
+
+var sen2 = imageCollection3
+.filterDate(time_start, time_end)
+.filterBounds(Taita)
+.map(function(img){
+  var ms = img.select("B.*").multiply(0.0001)
+  var ndvi = ms.normalizedDifference(['B8','B4']).rename('ndvi')
+  return ndvi
+  .copyProperties(img, ['system:time_start','system:time_end','system:index'])
+})
+
+
+var ndvi_collection = landsat8.merge(landsat9).merge(sen2)
+.sort("system:time_start")
+
+var month_list = ee.List.sequence(1,12);
+
+var monthly_ndvi= ee.ImageCollection(month_list.map(function(month){
+  var month_img = ndvi_collection.filter(ee.Filter.calendarRange(month, month, "month")).median()
+  var date = ee.Date.fromYMD(2023, month, 1);
+  return month_img
+  .set('system:time_start', date.millis())
+  .set('system:index',date.format('YYYY-MM'))
+  
+}));
+
+// Showing ndvi variation from one month to another
+Map.addLayer(monthly_ndvi.toBands().clip(Taita),[],'ndvi',false)
+
+
+var chart1 = ui.Chart.image.series(monthly_ndvi, geometry2, ee.Reducer.first(), 
+30, 'system:time_start')
+print(chart1)
+
+var chart2 = ui.Chart.image.seriesByRegion(monthly_ndvi,
+geometry3, ee.Reducer.first(), 'ndvi', 30, 'system:time_start', 'system:index')
+print(chart2)
